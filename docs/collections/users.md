@@ -4,7 +4,9 @@
 
 The `users` collection stores profile information for every authenticated user in BEAM Event Hub.
 
-Authentication is handled by Firebase Authentication. This collection stores application-specific profile data, roles, permissions, and organization membership.
+Authentication is managed by Firebase Authentication. This collection stores application-specific user information, organization membership, roles, permissions, preferences, and profile settings.
+
+Each Firebase Authentication user has exactly one corresponding Firestore document.
 
 ---
 
@@ -16,9 +18,30 @@ users
 
 # Purpose
 
-Store user profiles and control access throughout the application.
+The Users collection serves as the central identity store for the application.
 
-Each authenticated user has exactly one document in this collection.
+It is responsible for:
+
+- User profiles
+- Organization membership
+- Authentication mapping
+- Authorization
+- Role management
+- Permissions
+- Notification preferences
+- Profile settings
+
+---
+
+# Document ID Strategy
+
+Document ID = Firebase Authentication UID
+
+Example
+
+uid_xxxxxxxxxxxxxxxxx
+
+Using the Firebase UID as the Firestore document ID eliminates duplicate identifiers and simplifies lookups.
 
 ---
 
@@ -28,21 +51,20 @@ Provider
 
 Firebase Authentication
 
-Primary Identifier
+Supported Providers
 
-Firebase Authentication UID
-
-Document ID
-
-Use the Firebase Authentication UID as the Firestore document ID.
-
-Example
-
-uid: 5YQfN4nLmP8rXz9AbC
+- Email & Password
+- Google Sign-In
+- Apple Sign-In (Future)
+- Microsoft (Future)
 
 ---
 
-# User Roles
+# Primary Roles
+
+Each user has one primary role used for routing and dashboard selection.
+
+Available values:
 
 - Super Admin
 - Organization Admin
@@ -53,39 +75,74 @@ uid: 5YQfN4nLmP8rXz9AbC
 
 ---
 
+# Multiple Roles
+
+A user may have multiple assigned roles.
+
+Examples
+
+Organization Admin + Speaker
+
+Volunteer + Attendee
+
+Event Manager + Speaker
+
+Super Admin + Organization Admin
+
+---
+
 # Fields
 
 | Field | Type | Required | Description |
-|---------|------|----------|-------------|
-| firstName | String | Yes | First name |
-| lastName | String | Yes | Last name |
-| displayName | String | Yes | Display name |
+|--------|------|----------|-------------|
+| firstName | String | Yes | User first name |
+| lastName | String | Yes | User last name |
+| displayName | String | Yes | Public display name |
 | email | String | Yes | User email |
-| phone | String | No | Phone number |
+| phone | String | No | Contact phone |
 | photoUrl | String | No | Profile photo |
-| role | String | Yes | User role |
-| organizationRef | Document Reference | Yes | Organization |
-| jobTitle | String | No | Job title |
-| company | String | No | Company or organization |
 | bio | String | No | Biography |
+| company | String | No | Company or organization |
+| jobTitle | String | No | Job title |
 | website | String | No | Website |
 | linkedin | String | No | LinkedIn profile |
+| primaryRole | String | Yes | Default role used after login |
+| roles | List<String> | Yes | All assigned roles |
+| primaryOrganization | Document Reference | Yes | Default organization |
+| organizations | List<Document Reference> | Yes | Organizations the user belongs to |
+| permissions | List<String> | No | Additional permissions |
+| status | String | Yes | Account status |
+| profileComplete | Boolean | Yes | Has completed onboarding |
 | timezone | String | Yes | User timezone |
 | language | String | Yes | Preferred language |
-| notificationsEnabled | Boolean | Yes | Push notifications |
-| emailNotifications | Boolean | Yes | Email notifications |
-| isActive | Boolean | Yes | Active account |
+| pushNotifications | Boolean | Yes | Push notifications enabled |
+| emailNotifications | Boolean | Yes | Email notifications enabled |
+| smsNotifications | Boolean | No | SMS notifications enabled |
 | lastLogin | Timestamp | No | Last login |
-| createdAt | Timestamp | Yes | Created date |
-| updatedAt | Timestamp | Yes | Updated date |
-| createdBy | Document Reference | No | Created by admin |
-| updatedBy | Document Reference | No | Last updated by |
+| createdAt | Timestamp | Yes | Creation timestamp |
+| updatedAt | Timestamp | Yes | Last update timestamp |
+| createdBy | Document Reference | No | User who created this account |
+| updatedBy | Document Reference | No | Last user to update |
+
+---
+
+# Account Status
+
+Allowed values
+
+- Active
+- Pending
+- Invited
+- Suspended
+- Archived
 
 ---
 
 # Relationships
 
-User
+Users
+
+├── Organizations
 
 ├── Registrations
 
@@ -97,22 +154,75 @@ User
 
 ├── VolunteerAssignments
 
-└── Organization
+├── Favorite Sessions (Future)
+
+└── Notifications (Future)
 
 ---
 
-# Used By
+# Business Rules
 
-- Login
-- Register
-- Forgot Password
-- Home
-- Profile
-- Schedule
-- QR Pass
-- Admin Dashboard
-- Volunteer Dashboard
-- Speaker Dashboard
+- Every authenticated user must have one Firestore user document.
+- Every user must belong to at least one organization.
+- Every user must have one primary role.
+- A user may have multiple roles.
+- A user may belong to multiple organizations.
+- Email addresses must be unique.
+- Deleted users should be archived rather than permanently removed.
+
+---
+
+# Validation Rules
+
+- Email must be unique.
+- Display name cannot be empty.
+- First name is required.
+- Last name is required.
+- Primary role is required.
+- Primary organization is required.
+- Status must match an allowed value.
+
+---
+
+# Security Rules
+
+## Read
+
+Users can read their own profile.
+
+Organization Admins can read users in their organization.
+
+Super Admins can read every user.
+
+---
+
+## Create
+
+Registration Flow
+
+Organization Admin
+
+Super Admin
+
+---
+
+## Update
+
+User (Own Profile)
+
+Organization Admin
+
+Super Admin
+
+---
+
+## Delete
+
+Super Admin only.
+
+Recommendation:
+
+Archive users instead of deleting them.
 
 ---
 
@@ -120,111 +230,45 @@ User
 
 ## Current User
 
-Filter
-
 Document ID == auth.uid
 
 ---
 
 ## Users by Organization
 
-Filter
-
-organizationRef == currentOrganization
+primaryOrganization == organizationRef
 
 ---
 
 ## Users by Role
 
-Filter
-
-role == selectedRole
+roles array contains selectedRole
 
 ---
 
 ## Active Users
 
-Filter
-
-isActive == true
+status == "Active"
 
 ---
 
 ## Search Users
 
-Search
-
 displayName
 
 email
 
----
-
-# CRUD Operations
-
-Create
-
-✔ Firebase Authentication
-
-✔ Registration Flow
-
-Read
-
-✔ Authenticated User (own profile)
-
-✔ Organization Admin
-
-✔ Super Admin
-
-Update
-
-✔ User (own profile)
-
-✔ Organization Admin
-
-✔ Super Admin
-
-Delete
-
-✔ Super Admin
-
----
-
-# Security Rules
-
-Read
-
-Authenticated user can read their own document.
-
-Organization Admin can read users in their organization.
-
-Super Admin has full access.
-
----
-
-Write
-
-User may update their own profile.
-
-Organization Admin may update users within their organization.
-
-Super Admin may update all users.
-
----
-
-Delete
-
-Super Admin only.
+company
 
 ---
 
 # Composite Indexes
 
-organizationRef ASC
+primaryOrganization ASC
 
-role ASC
+status ASC
 
-isActive ASC
+primaryRole ASC
 
 displayName ASC
 
@@ -232,31 +276,97 @@ createdAt DESC
 
 ---
 
-# Validation Rules
+# CRUD Operations
 
-Email must be unique.
-
-Display name cannot be empty.
-
-Role must be one of:
-
-- Super Admin
-- Organization Admin
-- Event Manager
-- Volunteer
-- Speaker
-- Attendee
-
-organizationRef is required.
+| Operation | Attendee | Speaker | Volunteer | Event Manager | Org Admin | Super Admin |
+|------------|----------|----------|------------|---------------|------------|--------------|
+| Create | Registration | Registration | Registration | Registration | Yes | Yes |
+| Read Own | Yes | Yes | Yes | Yes | Yes | Yes |
+| Read Others | No | No | No | Organization | Organization | All |
+| Update Own | Yes | Yes | Yes | Yes | Yes | Yes |
+| Update Others | No | No | No | Limited | Organization | All |
+| Delete | No | No | No | No | No | Yes |
 
 ---
 
-# Future Expansion
+# Used By
 
-- MFA status
-- Last device
-- User preferences
-- Accessibility settings
+Authentication
+
+Login
+
+Register
+
+Forgot Password
+
+Profile
+
+Home
+
+Schedule
+
+QR Pass
+
+Speaker Dashboard
+
+Volunteer Dashboard
+
+Organization Dashboard
+
+Admin Dashboard
+
+Reports
+
+---
+
+# Example Document
+
+```json
+{
+  "firstName": "Darrelle",
+  "lastName": "Clark",
+  "displayName": "Darrelle Clark",
+  "email": "darrelle@example.com",
+  "phone": "+1 555-555-5555",
+  "photoUrl": "",
+  "primaryRole": "Organization Admin",
+  "roles": [
+    "Organization Admin",
+    "Speaker"
+  ],
+  "primaryOrganization": "/organizations/beam",
+  "organizations": [
+    "/organizations/beam"
+  ],
+  "permissions": [
+    "manage_events",
+    "manage_sessions",
+    "view_reports"
+  ],
+  "status": "Active",
+  "profileComplete": true,
+  "timezone": "America/Los_Angeles",
+  "language": "en",
+  "pushNotifications": true,
+  "emailNotifications": true,
+  "smsNotifications": false,
+  "lastLogin": "2026-08-06T20:00:00Z",
+  "createdAt": "2026-04-01T00:00:00Z",
+  "updatedAt": "2026-08-06T20:00:00Z"
+}
+```
+
+---
+
+# Future Enhancements
+
+- Multi-factor authentication status
+- User badges
+- Accessibility preferences
+- Theme preferences
 - Social accounts
-- Badge printing preferences
 - Digital business cards
+- Emergency contact
+- Calendar integrations
+- Activity log
+- Device management
