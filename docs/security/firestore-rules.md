@@ -1,171 +1,82 @@
 # Firestore Security Rules
 
-## Overview
+## Purpose
 
-BEAM Event Hub uses Firebase Authentication and Cloud Firestore Security Rules to protect application data.
+Define the authorization contract that must be implemented in deployed Firestore Rules. This document is a specification; it is not proof that rules are currently deployed.
 
-Security is based on:
+## Security Boundary
 
-- Authentication
-- Organization Membership
-- User Roles
-- Permissions
-- Document Ownership
+FlutterFlow visibility, navigation guards, and conditional widgets are not security controls. Firestore Rules must independently enforce access.
 
----
+## Core Checks
 
-# Security Principles
+Every protected operation should evaluate:
 
-- Every request must be authenticated.
-- Users only access data for organizations they belong to.
-- Users only perform actions they have permission to perform.
-- Firestore Rules enforce security.
-- FlutterFlow UI only improves user experience and must never be relied upon for security.
+1. Authentication (`request.auth != null`).
+2. User profile existence where application authorization requires it.
+3. Account status.
+4. Organization membership/scope.
+5. Role and/or explicit permission.
+6. Document ownership for user-owned data.
+7. Valid write fields and immutable fields.
 
----
+## Identity
 
-# Authentication
+Application profile: `users/{request.auth.uid}`.
 
-All requests require authentication unless explicitly marked public.
+Users may update only permitted profile fields on their own document. Role, permissions, organization membership, status, and other security-controlled fields require elevated authorization.
 
-Example
+## Organization Isolation
 
-request.auth != null
+Organization-scoped documents must not be readable or writable by users outside the owning organization. Child resources inherit the organization/event scope through their parent relationships or explicit organization metadata.
 
----
+## Role/Permission Model
 
-# Organization Isolation
+Use the documented roles and permission names as the application authorization vocabulary. Super Admin is platform-wide. Organization Admin, Event Manager, Volunteer, Speaker, and Attendee are scoped according to their documented permissions.
 
-Users may only access documents belonging to their organization.
+## Ownership
 
-Example
+Attendee-owned registrations/tickets and personal data must be restricted to the authenticated owner unless an authorized staff permission permits access.
 
-resource.data.organizationRef in user.organizations
+## Public Reads
 
----
+Public access, if enabled, must be limited to intentionally public data such as published event/speaker content. Never make an entire collection public when only a subset of documents is public.
 
-# Role-Based Access
+## Write Validation
 
-Permissions are evaluated using:
+Rules should reject writes that:
 
-1. Super Admin
-2. Primary Role
-3. Secondary Roles
-4. Individual Permissions
+- Omit required fields.
+- Change immutable ownership fields without permission.
+- Change organization scope without permission.
+- Grant roles or permissions without authorization.
+- Modify another user's private data.
+- Bypass lifecycle/status requirements.
 
----
+## Soft Delete
 
-# Ownership
+Prefer status-based archival for business records that require historical reporting. Permanent deletion should be restricted and used only where policy permits.
 
-Users may edit their own profile.
+## Audit Metadata
 
-Users may never edit another user's profile unless they have permission.
+Where supported, protected business documents should maintain `createdAt`, `updatedAt`, `createdBy`, and `updatedBy`. Server/trusted timestamps are preferred for audit fields.
 
----
+## Required Rule Tests
 
-# Soft Delete
+Before production, test every major collection with:
 
-Collections should not be permanently deleted.
+- Unauthenticated read/write
+- Authenticated attendee access
+- Attendee access to another attendee's data
+- Volunteer scoped access
+- Speaker scoped access
+- Event Manager access
+- Organization Admin access
+- Super Admin access
+- Cross-organization access
+- Role/permission escalation attempts
+- Invalid field/ownership updates
 
-Instead:
+## Deployment Requirement
 
-status = "Archived"
-
----
-
-# Public Collections
-
-The following collections may allow public read access.
-
-- Published Events
-- Published Speakers
-- Published Sponsors
-
-Everything else requires authentication.
-
----
-
-# Audit Fields
-
-Every collection should contain:
-
-createdAt
-
-updatedAt
-
-createdBy
-
-updatedBy
-
----
-
-# Required Metadata
-
-Every secured collection should contain
-
-organizationRef
-
-createdAt
-
-updatedAt
-
-status
-
----
-
-# Status Values
-
-Draft
-
-Published
-
-Archived
-
-Inactive
-
-Active
-
-Pending
-
-Cancelled
-
-Completed
-
----
-
-# Validation Rules
-
-All writes should validate:
-
-- Required fields
-- Data types
-- Organization ownership
-- User permissions
-
----
-
-# Security Checklist
-
-✓ Authentication required
-
-✓ Organization verified
-
-✓ Permission verified
-
-✓ Required fields validated
-
-✓ Metadata updated
-
-✓ Audit trail maintained
-
----
-
-# Future Enhancements
-
-- Custom Claims
-- Multi-Factor Authentication
-- IP Restrictions
-- API Keys
-- Rate Limiting
-- Audit Logs
-- Security Monitoring
+The project is not production-ready until actual Firestore Rules have been deployed to the intended Firebase project and automated/manual authorization tests pass.
